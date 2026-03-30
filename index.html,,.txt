@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>생태계 밸런스: 멸종 위기 모드</title>
+    <style>
+        :root {
+            --bg-color: #0b111a; --card-bg: #161c27; --text-primary: #ffffff;
+            --accent: #00bcd4; --success: #4caf50; --warning: #ffeb3b; --danger: #f44336;
+        }
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: var(--text-primary); display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; min-height: 100vh;}
+        
+        #game-header { display: none; justify-content: space-between; align-items: center; width: 100%; max-width: 1200px; padding: 15px 20px; border-bottom: 3px solid var(--accent); margin-bottom: 30px; box-sizing: border-box; }
+        #game-stats { display: flex; gap: 30px; font-weight: bold; font-size: 1.5rem; }
+        #turn-count { color: var(--accent); }
+
+        #main-container { display: none; gap: 40px; width: 100%; max-width: 1200px; }
+        
+        /* 왼쪽 수치 대시보드 확대 */
+        #dashboard { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+        .sphere-card { background: var(--card-bg); border-radius: 15px; padding: 20px; box-shadow: 0 6px 12px rgba(0,0,0,0.4); }
+        .sphere-value { font-size: 1.5rem; font-weight: bold; }
+        .progress-bar { height: 15px; background-color: #333; border-radius: 8px; overflow: hidden; margin-top: 10px; }
+        .progress-fill { height: 100%; width: 0%; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s; }
+        
+        #game-area { flex: 2; display: flex; flex-direction: column; gap: 20px; }
+        
+        /* 1. 현상 선택 버튼 대폭 확대 (타일형) */
+        #choice-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .choice-btn { 
+            background: var(--card-bg); color: var(--text-primary); border: 3px solid transparent; 
+            padding: 30px 20px; border-radius: 20px; cursor: pointer; text-align: center; 
+            transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 15px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .choice-btn:hover { border-color: var(--accent); transform: translateY(-5px); background-color: #1e2636; }
+        .icon-large { font-size: 4.5rem; }
+        .choice-title { font-size: 1.6rem; font-weight: bold; margin-bottom: 5px; }
+        .choice-desc { font-size: 1.1rem; color: #bbb; line-height: 1.4; }
+
+        /* 2. 예측 선택지 버튼 확대 */
+        #stage-predict { display: none; flex-direction: column; gap: 25px; }
+        .prediction-btn { 
+            background: var(--card-bg); color: var(--text-primary); border: 3px solid #333; 
+            padding: 22px 30px; border-radius: 12px; cursor: pointer; margin-bottom: 15px; 
+            width: 100%; text-align: left; font-size: 1.3rem; line-height: 1.5; transition: 0.2s;
+        }
+        .prediction-btn:hover { border-color: #555; }
+        .prediction-btn.selected { border-color: var(--warning); background-color: rgba(255, 235, 59, 0.15); box-shadow: 0 0 15px rgba(255, 235, 59, 0.2); }
+
+        #final-screen { display: none; flex-direction: column; align-items: center; gap: 20px; text-align: center; margin-top: 50px; }
+        .restart-btn { background-color: var(--success); color: white; border: none; padding: 18px 40px; border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 1.3rem; margin-top: 20px; transition: 0.3s; }
+        .restart-btn:hover { transform: scale(1.05); filter: brightness(1.2); }
+        
+        #start-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; text-align: center; }
+        #start-button { background: linear-gradient(90deg, #00bcd4, #4caf50); color: white; border: none; padding: 25px 70px; border-radius: 50px; font-size: 1.8rem; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 6px 20px rgba(0, 188, 212, 0.5); }
+        #start-button:hover { transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+<div id="start-screen">
+    <div style="font-size: 6rem; margin-bottom: 20px;">🌍</div>
+    <h1 style="font-size: 4rem; margin: 0 0 10px 0;">생태계 밸런스</h1>
+    <p style="color: #aaa; font-size: 1.3rem; margin-bottom: 15px;">신중하게 과학적 결과를 예측하여 생태계 평형을 유지하세요.</p>
+    <p style="color: var(--danger); font-size: 1.2rem; font-weight: bold; margin-bottom: 40px;">경고: 어느 한 권역이라도 멸종(0%)하면 시뮬레이션은 즉시 실패합니다!</p>
+    <button id="start-button" onclick="startGame()">▶ 시뮬레이션 시작 (BGM ON)</button>
+</div>
+
+<div id="game-header">
+    <div style="display: flex; align-items: center; gap: 15px;">🌿 <h1 style="margin:0; font-size: 2rem;">생태계 밸런스</h1></div>
+    <div id="game-stats">
+        <div id="turn-count">1 / 10 TURN</div>
+        <div>예측 점수: <span id="quiz-score-val" style="color:var(--warning)">0</span></div>
+    </div>
+</div>
+
+<div id="main-container">
+    <div id="dashboard">
+        <h2 style="border-left: 6px solid var(--accent); padding-left: 15px; font-size: 1.8rem; margin-bottom: 5px;">생태 권역 수치</h2>
+        <div id="sphere-container"></div>
+    </div>
+    <div id="game-area">
+        <div id="stage-choose">
+            <h2 style="font-size: 1.8rem;">자연현상 선택 <span style="font-size:1.2rem; color:#aaa; font-weight:normal;">(4개 중 택 1)</span></h2>
+            <div id="choice-container"></div>
+        </div>
+        <div id="stage-predict">
+            <div id="predict-header-card" class="sphere-card" style="border: 2px solid var(--accent); display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 id="predict-header-title" style="margin:0; font-size: 1.8rem;"></h3>
+                    <p id="predict-header-desc" style="color:#bbb; margin:10px 0 0 0; font-size: 1.2rem;"></p>
+                </div>
+                <button class="restart-btn" style="padding:15px 30px; margin: 0; background-color: var(--accent);" onclick="processTurn()">예측 확정하기</button>
+            </div>
+            <div id="prediction-container" style="margin-top:10px;"></div>
+        </div>
+    </div>
+</div>
+
+<div id="final-screen">
+    <h1 id="final-title" style="font-size: 4rem; margin-bottom: 0;">시뮬레이션 결과</h1>
+    <p id="final-msg" style="font-size: 1.5rem; color:#ccc;"></p>
+    <h2 id="final-score-display" style="font-size: 2rem; background: var(--card-bg); padding: 30px; border-radius: 15px; border: 2px solid var(--accent);"></h2>
+    <button class="restart-btn" style="font-size: 1.5rem; padding: 20px 50px;" onclick="location.reload()">다시 도전하기</button>
+</div>
+
+<script>
+    // --- 🎶 활기찬 휘파람 BGM 엔진 (자체 합성) ---
+    let audioCtx;
+    let bgmInterval;
+    
+    function initAudio() {
+        if(audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // 밝고 통통 튀는 멜로디 (도-미-솔-미, 레-파-라-파 반복)
+        const notes = [
+            1046.5, 1318.51, 1567.98, 1318.51, 
+            1046.5, 1318.51, 1567.98, 0,       
+            1174.66, 1396.91, 1760.00, 1396.91,
+            1174.66, 1396.91, 1760.00, 0       
+        ];
+        
+        let noteIndex = 0;
+        
+        bgmInterval = setInterval(() => {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const freq = notes[noteIndex];
+            if(freq > 0) {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'sine'; // 사인파가 휘파람 소리와 가장 흡사함
+                
+                // 휘파람 특유의 음정 끌어올리기 (살짝 낮은 음에서 목표 음으로 슬라이드)
+                osc.frequency.setValueAtTime(freq * 0.9, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(freq, audioCtx.currentTime + 0.05);
+                
+                // 통통 튀는 스타카토 볼륨 조절
+                gain.gain.setValueAtTime(0, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.03); // 볼륨(0.15)
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.25);
+            }
+            noteIndex = (noteIndex + 1) % notes.length;
+        }, 250); // 1비트당 0.25초 (매우 경쾌하고 빠른 템포)
+    }
+
+    function stopBGM() {
+        if(bgmInterval) clearInterval(bgmInterval);
+    }
+
+    // 선택지 클릭 효과음
+    function playClickSound() {
+        if(!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+    }
+
+    // 턴 전환 효과음 (성공적인 느낌)
+    function playTurnSound() {
+        if(!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // 도
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // 미
+        osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); // 솔
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+    }
+    // ------------------------------------------------------------------
+
+    let gameState = { turn: 1, maxTurns: 10, quizScore: 0, isGameOver: false };
+    let spheres = {
+        producer: { name: '생산자 (풀/나무)', value: 50, color: '#4caf50' },
+        prey: { name: '초식동물 (토끼)', value: 50, color: '#03a9f4' },
+        predator: { name: '육식동물 (늑대)', value: 50, color: '#f44336' },
+        habitat: { name: '서식지 환경', value: 50, color: '#ff9800' },
+        biodiversity: { name: '생물 다양성', value: 50, color: '#9c27b0' }
+    };
+
+    const events = [
+        { id:1, title:'늑대 무리 복원', desc:'사라졌던 최상위 포식자가 돌아왔습니다.', icon:'🐺', direct:{s:'predator', v:25}, predictions:[
+            {t:'초식동물의 수가 조절되어 숲이 안정화된다.', c:true, a:{prey:-15}},
+            {t:'초식동물이 줄어들어 식물(생산자)이 더 잘 자라난다.', c:true, a:{producer:10}},
+            {t:'먹이사슬 평형이 회복되어 생물 다양성이 높아진다.', c:true, a:{biodiversity:5}},
+            {t:'늑대가 식물(생산자)을 직접 먹어치워 풀이 줄어든다.', c:false} 
+        ]},
+        { id:2, title:'대형 산불 발생', desc:'건조한 날씨로 인해 숲의 상당 부분이 탔습니다.', icon:'🔥', direct:{s:'habitat', v:-30}, predictions:[
+            {t:'식물이 대량으로 소실되어 생산자가 급감한다.', c:true, a:{producer:-25}},
+            {t:'서식지를 잃은 동물들이 숲을 떠나 개체수가 준다.', c:true, a:{prey:-10, predator:-10}},
+            {t:'타고 남은 재가 흙을 영원히 오염시켜 식물이 다신 자라지 못한다.', c:false} 
+        ]},
+        { id:3, title:'초식동물 전염병', desc:'토끼들 사이에 치명적인 병이 유행합니다.', icon:'🦠', direct:{s:'prey', v:-35}, predictions:[
+            {t:'먹이가 부족해져 육식동물도 함께 굶주리게 된다.', c:true, a:{predator:-20}},
+            {t:'풀을 뜯어먹는 동물이 줄어 식물이 무성하게 자란다.', c:true, a:{producer:15}},
+            {t:'초식동물의 병이 식물에게도 전염되어 숲이 시든다.', c:false} 
+        ]},
+        { id:4, title:'생태 통로 설치', desc:'도로로 끊겼던 숲을 다리로 연결했습니다.', icon:'🌉', direct:{s:'habitat', v:20}, predictions:[
+            {t:'동물들의 이동이 자유로워져 생물 다양성이 보존된다.', c:true, a:{biodiversity:15}},
+            {t:'로드킬 위험이 줄어들어 동물 개체수가 안정된다.', c:true, a:{prey:10, predator:10}},
+            {t:'서식지가 합쳐져 동물들 간의 싸움만 늘어나 멸종이 빨라진다.', c:false} 
+        ]},
+        { id:5, title:'외래종 황소개구리', desc:'천적이 없는 강력한 생물이 유입되었습니다.', icon:'🐸', direct:{s:'biodiversity', v:-20}, predictions:[
+            {t:'토착종들이 먹이 경쟁에서 밀려 개체수가 줄어든다.', c:true, a:{prey:-15}},
+            {t:'천적이 없어 외래종이 숲의 환경을 빠르게 차지한다.', c:true, a:{habitat:-10}},
+            {t:'새로운 생물이 추가되었으므로 무조건 생물 다양성이 증가한다.', c:false} 
+        ]},
+        { id:6, title:'집중 호우', desc:'숲에 며칠 동안 엄청난 비가 쏟아집니다.', icon:'🌧️', direct:{s:'habitat', v:15}, predictions:[
+            {t:'풍부한 수분 공급으로 식물의 성장이 촉진된다.', c:true, a:{producer:15}},
+            {t:'갑작스러운 홍수로 일부 작은 동물들의 서식지가 파괴된다.', c:true, a:{prey:-10}},
+            {t:'비가 너무 많이 와서 식물의 광합성이 완전히 멈춘다.', c:false} 
+        ]}
+    ];
+
+    function startGame() {
+        initAudio(); 
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('game-header').style.display = 'flex';
+        document.getElementById('main-container').style.display = 'flex';
+        initDashboard();
+        renderChoices();
+    }
+
+    function initDashboard() {
+        const container = document.getElementById('sphere-container');
+        for (const [key, s] of Object.entries(spheres)) {
+            container.innerHTML += `
+                <div class="sphere-card">
+                    <div style="display:flex; justify-content:space-between">
+                        <span style="color:${s.color}; font-weight:bold; font-size:1.3rem;">${s.name}</span>
+                        <span class="sphere-value"><span id="${key}-val">${s.value}</span>% <span id="${key}-change" class="stat-change"></span></span>
+                    </div>
+                    <div class="progress-bar"><div id="${key}-bar" class="progress-fill" style="background-color:${s.color}; width:${s.value}%"></div></div>
+                </div>`;
+        }
+    }
+
+    function renderChoices() {
+        const container = document.getElementById('choice-container');
+        container.innerHTML = '';
+        const pool = [...events].sort(() => Math.random() - 0.5).slice(0, 4); 
+        pool.forEach(ev => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            // 디자인 대폭 수정: 위에는 거대한 이모티콘, 아래는 제목과 설명
+            btn.innerHTML = `
+                <span class="icon-large">${ev.icon}</span>
+                <div>
+                    <div class="choice-title">${ev.title}</div>
+                    <div class="choice-desc">${ev.desc}</div>
+                </div>`;
+            btn.onclick = () => { playClickSound(); selectEvent(ev); };
+            container.appendChild(btn);
+        });
+    }
+
+    function selectEvent(ev) {
+        gameState.currentEv = ev;
+        document.getElementById('stage-choose').style.display = 'none';
+        document.getElementById('stage-predict').style.display = 'flex';
+        document.getElementById('predict-header-title').innerText = ev.icon + " " + ev.title;
+        document.getElementById('predict-header-desc').innerText = ev.desc;
+        
+        const pCon = document.getElementById('prediction-container');
+        pCon.innerHTML = '<h4 style="margin-top:0; color:var(--accent); font-size: 1.5rem;">이 현상으로 인해 일어날 과학적 변화를 모두 고르세요 (함정 주의!)</h4>';
+        
+        [...ev.predictions].sort(() => Math.random() - 0.5).forEach(p => {
+            const b = document.createElement('button');
+            b.className = 'prediction-btn';
+            b.innerHTML = `<span style="font-weight:bold; color:var(--accent);">[선택]</span> ${p.t}`;
+            b.onclick = () => { playClickSound(); b.classList.toggle('selected'); };
+            pCon.appendChild(b);
+        });
+    }
+
+    function processTurn() {
+        playTurnSound(); 
+        
+        const ev = gameState.currentEv;
+        const selectedElements = Array.from(document.querySelectorAll('.prediction-btn.selected'));
+        const selected = selectedElements.map(el => el.innerText.replace('[선택] ', '').trim());
+
+        updateSphere(ev.direct.s, ev.direct.v);
+        if(gameState.isGameOver) return;
+
+        ev.predictions.forEach(p => {
+            if (selected.includes(p.t)) {
+                if (p.c) {
+                    gameState.quizScore += 10;
+                    if(p.a) for(const [k, v] of Object.entries(p.a)) updateSphere(k, v);
+                } else {
+                    gameState.quizScore -= 10; 
+                }
+            }
+        });
+
+        if(gameState.isGameOver) return;
+
+        // 밸런스 체크
+        const total = spheres.producer.value + spheres.prey.value + spheres.predator.value;
+        if(total >= 130 && total <= 220) updateSphere('biodiversity', 5);
+        else updateSphere('biodiversity', -5);
+
+        gameState.turn++;
+        if (gameState.turn > gameState.maxTurns) endGame("축하합니다! 생태계의 복잡한 연쇄반응을 훌륭히 예측했습니다.");
+        else {
+            document.getElementById('stage-predict').style.display = 'none';
+            document.getElementById('stage-choose').style.display = 'flex';
+            document.getElementById('turn-count').innerText = `${gameState.turn} / 10 TURN`;
+            document.getElementById('quiz-score-val').innerText = gameState.quizScore;
+            renderChoices();
+        }
+    }
+
+    function updateSphere(key, val) {
+        spheres[key].value = Math.max(0, Math.min(100, spheres[key].value + val));
+        document.getElementById(`${key}-val`).innerText = spheres[key].value;
+        document.getElementById(`${key}-bar`).style.width = spheres[key].value + "%";
+        
+        if (spheres[key].value <= 0) {
+            endGame(`[생태계 붕괴] ${spheres[key].name} 권역이 0%가 되어 멸종했습니다!`, true);
+        }
+    }
+
+    function endGame(msg, isFailed = false) {
+        gameState.isGameOver = true;
+        stopBGM(); // 휘파람 음악 정지
+        
+        document.getElementById('main-container').style.display = 'none';
+        document.getElementById('game-header').style.display = 'none';
+        const screen = document.getElementById('final-screen');
+        screen.style.display = 'flex';
+        document.getElementById('final-title').innerText = isFailed ? "GAME OVER" : "시뮬레이션 완수";
+        document.getElementById('final-title').style.color = isFailed ? "var(--danger)" : "var(--success)";
+        document.getElementById('final-msg').innerText = msg;
+        document.getElementById('final-score-display').innerHTML = `
+            최종 예측 점수: <span style="color:var(--warning);">${gameState.quizScore}점</span><br>
+            <span style="font-size: 0.8em; color: #aaa;">생물 다양성 유지율: ${spheres.biodiversity.value}%</span>
+        `;
+    }
+</script>
+</body>
+</html>
